@@ -19,7 +19,7 @@ print(f"Using IMAGES_DIR: {IMAGES_DIR}")
 VAL_SIZE = 0.15
 RANDOM_STATE = 42
 BATCH_SIZE = 16
-NUM_WORKERS = 4
+NUM_WORKERS = 1
 
 # columns in the order you showed
 class_cols = ["MEL", "NV", "BCC", "AKIEC", "BKL", "DF", "VASC"]
@@ -109,14 +109,14 @@ def get_loaders(
         batch_size=batch_size,
         shuffle=True,
         num_workers=num_workers,
-        pin_memory=True,
+        pin_memory=False,
     )
     val_loader = DataLoader(
         val_dataset,
         batch_size=batch_size,
         shuffle=False,
         num_workers=num_workers,
-        pin_memory=True,
+        pin_memory=False,
     )
     return train_loader, val_loader, train_df, val_df
 

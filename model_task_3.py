@@ -1,9 +1,10 @@
-import math
-from typing import Dict, Any, Tuple, Optional
+from typing import Tuple, Optional
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import timm
+from tqdm import tqdm
+
 
 class BalancedFocalLoss(nn.Module):
     """
@@ -20,6 +21,7 @@ class BalancedFocalLoss(nn.Module):
             total = float(sum(class_counts))
             weights = [total / (c + 1e-6) for c in class_counts]
             w = torch.tensor(weights, dtype=torch.float32)
+            # normalize to keep scale reasonable
             w = w / w.sum() * len(weights)
             self.register_buffer("class_weights", w)
 
@@ -56,15 +58,19 @@ def train_one_epoch(
     criterion: nn.Module,
     optimizer: optim.Optimizer,
     device: torch.device,
+    epoch: int = 0,
+    total_epochs: int = 0,
 ) -> Tuple[float, float]:
     model.train()
     total_loss = 0.0
     total_correct = 0
     total = 0
 
-    for images, labels in loader:
-        images = images.to(device, non_blocking=True)
-        labels = labels.to(device, non_blocking=True)
+    # nice progress bar
+    pbar = tqdm(loader, desc=f"Epoch {epoch+1}/{total_epochs}", leave=False)
+    for images, labels in pbar:
+        images = images.to(device)
+        labels = labels.to(device)
 
         optimizer.zero_grad()
         logits = model(images)
@@ -72,10 +78,15 @@ def train_one_epoch(
         loss.backward()
         optimizer.step()
 
-        total_loss += loss.item() * images.size(0)
+        bs = images.size(0)
+        total_loss += loss.item() * bs
         preds = logits.argmax(1)
         total_correct += (preds == labels).sum().item()
-        total += images.size(0)
+        total += bs
+
+        avg_loss = total_loss / total
+        avg_acc = total_correct / total
+        pbar.set_postfix(loss=f"{avg_loss:.4f}", acc=f"{avg_acc:.4f}")
 
     return total_loss / total, total_correct / total
 
@@ -93,16 +104,17 @@ def evaluate(
     total = 0
 
     for images, labels in loader:
-        images = images.to(device, non_blocking=True)
-        labels = labels.to(device, non_blocking=True)
+        images = images.to(device)
+        labels = labels.to(device)
 
         logits = model(images)
         loss = criterion(logits, labels)
 
-        total_loss += loss.item() * images.size(0)
+        bs = images.size(0)
+        total_loss += loss.item() * bs
         preds = logits.argmax(1)
         total_correct += (preds == labels).sum().item()
-        total += images.size(0)
+        total += bs
 
     return total_loss / total, total_correct / total
 
@@ -126,8 +138,14 @@ def train_model(
     High-level helper: trains and saves best val model.
     Returns model and a history dict.
     """
+    # pick best device for your Mac/NVIDIA/CPU
     if device is None:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if torch.backends.mps.is_available():
+            device = torch.device("mps")
+        elif torch.cuda.is_available():
+            device = torch.device("cuda")
+        else:
+            device = torch.device("cpu")
 
     model = create_model(num_classes, model_name, pretrained=True).to(device)
 
@@ -137,7 +155,7 @@ def train_model(
         criterion = nn.CrossEntropyLoss().to(device)
 
     optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
-    # simple cosine over epochs
+    # cosine per epoch (simple)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
 
     best_val_acc = 0.0
@@ -145,7 +163,13 @@ def train_model(
 
     for epoch in range(epochs):
         train_loss, train_acc = train_one_epoch(
-            model, train_loader, criterion, optimizer, device
+            model,
+            train_loader,
+            criterion,
+            optimizer,
+            device,
+            epoch=epoch,
+            total_epochs=epochs,
         )
         val_loss, val_acc = evaluate(model, val_loader, device)
 
