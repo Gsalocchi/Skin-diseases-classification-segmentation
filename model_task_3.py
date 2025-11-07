@@ -133,6 +133,7 @@ def train_model(
     device: Optional[torch.device] = None,
     class_counts=None,  # pass list from your train_df if you want
     save_path: str = "best_model.pth",
+    model: nn.Module = None,
 ):
     """
     High-level helper: trains and saves best val model.
@@ -146,8 +147,10 @@ def train_model(
             device = torch.device("cuda")
         else:
             device = torch.device("cpu")
-
-    model = create_model(num_classes, model_name, pretrained=True).to(device)
+    if model is None:
+        model = create_model(num_classes, model_name, pretrained=True).to(device)
+    else:
+        model = model.to(device)
 
     if class_counts is not None:
         criterion = BalancedFocalLoss(class_counts=class_counts, gamma=2.0).to(device)
