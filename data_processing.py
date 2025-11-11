@@ -10,30 +10,13 @@ from torch.utils.data import Dataset, DataLoader
 # load .env if you want to keep paths there
 load_dotenv()
 # -----------------------------------------------------
-# Defaults provided by the user (will be overridden by environment variables if set)
-TASK_3_TRAIN_LABELS_DIR = os.getenv(
-    "TASK_3_TRAIN_LABELS_DIR",
-    "data/Task_3/ISIC2018_Task3_Training_GroundTruth.csv",
-)
-TASK_3_TRAIN_IMAGES_DIR = os.getenv("TASK_3_TRAIN_IMAGES_DIR", "data/Task_3/Train_images")
+TASK_3_TRAIN_LABELS_DIR = os.getenv("TASK_3_TRAIN_LABELS_DIR")
+TASK_3_TRAIN_IMAGES_DIR = os.getenv("TASK_3_TRAIN_IMAGES_DIR")
 
-TASK_3_VALIDATION_LABELS_DIR = os.getenv(
-    "TASK_3_VALIDATION_LABELS_DIR",
-    "data/Task_3/ISIC2018_Task3_Validation_GroundTruth.csv",
-)
-TASK_3_VALIDATION_IMAGES_DIR = os.getenv(
-    "TASK_3_VALIDATION_IMAGES_DIR",
-    "data/Task_3/Validation_images",
-)
-
-TASK_3_TEST_LABELS_DIR = os.getenv(
-    "TASK_3_TEST_LABELS_DIR",
-    "data/Task_3/ISIC2018_Task3_Test_GroundTruth.csv",
-)
-TASK_3_TEST_IMAGES_DIR = os.getenv(
-    "TASK_3_TEST_IMAGES_DIR",
-    "data/Task_3/Test_images",
-)
+TASK_3_VALIDATION_LABELS_DIR = os.getenv("TASK_3_VALIDATION_LABELS_DIR")
+TASK_3_VALIDATION_IMAGES_DIR = os.getenv("TASK_3_VALIDATION_IMAGES_DIR")
+TASK_3_TEST_LABELS_DIR = os.getenv("TASK_3_TEST_LABELS_DIR")
+TASK_3_TEST_IMAGES_DIR = os.getenv("TASK_3_TEST_IMAGES_DIR")
 
 print(f"Using CSV_PATH: {TASK_3_TRAIN_LABELS_DIR}")
 print(f"Using IMAGES_DIR: {TASK_3_TRAIN_IMAGES_DIR}")
@@ -67,21 +50,6 @@ def build_dfs(
     - Otherwise, split the training CSV using `train_test_split`.
     - If `test_csv_path` is provided, read it and return the test DF as well.
     """
-    # If caller didn't pass explicit val/test CSVs, prefer the module-level
-    # TASK_3_VALIDATION_LABELS_DIR / TASK_3_TEST_LABELS_DIR if the files exist.
-    if val_csv_path is None and TASK_3_VALIDATION_LABELS_DIR and os.path.exists(
-        TASK_3_VALIDATION_LABELS_DIR
-    ):
-        val_csv_path = TASK_3_VALIDATION_LABELS_DIR
-        # default images dir for validation if not provided
-        val_images_dir = val_images_dir or TASK_3_VALIDATION_IMAGES_DIR
-
-    if test_csv_path is None and TASK_3_TEST_LABELS_DIR and os.path.exists(
-        TASK_3_TEST_LABELS_DIR
-    ):
-        test_csv_path = TASK_3_TEST_LABELS_DIR
-        test_images_dir = test_images_dir or TASK_3_TEST_IMAGES_DIR
-
     # read train CSV
     train_df = pd.read_csv(csv_path)
     # turn one-hot into single label
@@ -97,7 +65,7 @@ def build_dfs(
         print("Warning: some train image files were not found, first few:")
         print(missing_train[["image", "path"]].head())
 
-    # If a separate validation CSV is provided (or detected above), read it and prepare val_df.
+    # If a separate validation CSV is provided, read it and prepare val_df
     val_df = None
     if val_csv_path:
         val_df = pd.read_csv(val_csv_path)
@@ -114,7 +82,7 @@ def build_dfs(
             print(missing_val[["image", "path"]].head())
 
     else:
-        # No explicit validation dataset: split the train CSV into train/val
+        # Otherwise, split the train CSV into train/val
         train_df, val_df = train_test_split(
             train_df,
             test_size=VAL_SIZE,
@@ -122,7 +90,7 @@ def build_dfs(
             stratify=train_df["label"],
         )
 
-    # If a test CSV is provided (or detected above), read and prepare test_df
+    # If a test CSV is provided, read and prepare test_df
     if test_csv_path:
         test_df = pd.read_csv(test_csv_path)
         test_df["label"] = test_df[class_cols].values.argmax(axis=1)

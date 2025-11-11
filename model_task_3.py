@@ -7,11 +7,7 @@ from tqdm import tqdm
 
 
 class BalancedFocalLoss(nn.Module):
-    """
-    Focal loss + per-class weights from counts.
-    counts: list/torch.Tensor with length C (count per class in train set).
-    If you don't have counts, pass None and use plain CE instead.
-    """
+
     def __init__(self, class_counts=None, gamma: float = 2.0):
         super().__init__()
         self.gamma = gamma
