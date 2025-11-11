@@ -160,37 +160,24 @@ class SkinDataset(Dataset):
         return img, label
 
 
-def get_transforms(image_size=(384, 384), model = 'vit'):
-    if model == 'resnet':
-        train_tf = transforms.Compose([
+def get_transforms(image_size=(384, 384)):
+    train_tf = transforms.Compose([
+        transforms.Resize(image_size),
         transforms.RandomHorizontalFlip(),
-        transforms.RandomCrop(32, padding=4),
+        transforms.RandomVerticalFlip(),
+        transforms.ColorJitter(brightness=0.2, contrast=0.2,
+                            saturation=0.1, hue=0.02),
         transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-        ])
+        transforms.Normalize(mean=(0.485, 0.456, 0.406),
+                            std=(0.229, 0.224, 0.225)),
+    ])
 
-        val_tf = transforms.Compose([
+    val_tf = transforms.Compose([
+        transforms.Resize(image_size),
         transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-        ])
-    else:
-        train_tf = transforms.Compose([
-            transforms.Resize(image_size),
-            transforms.RandomHorizontalFlip(),
-            transforms.RandomVerticalFlip(),
-            transforms.ColorJitter(brightness=0.2, contrast=0.2,
-                                saturation=0.1, hue=0.02),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=(0.485, 0.456, 0.406),
-                                std=(0.229, 0.224, 0.225)),
-        ])
-
-        val_tf = transforms.Compose([
-            transforms.Resize(image_size),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=(0.485, 0.456, 0.406),
-                                std=(0.229, 0.224, 0.225)),
-        ])
+        transforms.Normalize(mean=(0.485, 0.456, 0.406),
+                            std=(0.229, 0.224, 0.225)),
+    ])
     return train_tf, val_tf
 
 
