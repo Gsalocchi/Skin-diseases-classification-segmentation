@@ -89,60 +89,101 @@ def build_dfs(
     return train_df, val_df
 
 
-
+# --------------------------
+#  AUGMENTATION DEFINITION
+# --------------------------
 def get_transforms(image_size=(384, 384)):
+    """
+    Returns:
+        train_transforms: list[Callable] - each is one augmentation pipeline.
+        val_tf: Callable - validation transform.
+    Each train sample will be seen once for every transform via MultiAugmentDataset.
+    """
 
+    # Common blocks reused across the different augmentation pipelines
+    mean = (0.485, 0.456, 0.406)
+    std = (0.229, 0.224, 0.225)
 
-    train_tf = transforms.Compose([ # data augmentation resize 
+    # Base geometric + color augmentation (stochastic inside each pipeline)
+    base_aug = [
         transforms.RandomResizedCrop(
             size=image_size,
             scale=(0.8, 1.0),
             ratio=(0.9, 1.1),
         ),
-        transforms.RandomRotation( # rotate between -180 and 180 degrees
+        transforms.RandomRotation(
             degrees=180,
             fill=0,
         ),
-        transforms.RandomHorizontalFlip(p=0.5), #mirror horizontally and flip vertically
-        transforms.RandomVerticalFlip(p=0.5), 
-        transforms.ColorJitter( # change brightness, contrast, saturation, hue
+        transforms.RandomHorizontalFlip(p=0.5),
+        transforms.RandomVerticalFlip(p=0.5),
+        transforms.ColorJitter(
             brightness=0.2,
             contrast=0.2,
             saturation=0.15,
             hue=0.02,
         ),
-        transforms.RandomApply(
-            [transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 1.0))],
-            p=0.2,
-        ),
-        transforms.ToTensor(), # convert PIL image to tensor
-        transforms.Normalize(
-            mean=(0.485, 0.456, 0.406),
-            std=(0.229, 0.224, 0.225),
-        ),
-        transforms.RandomErasing(
-            p=0.2,
-            scale=(0.02, 0.06),
-            ratio=(0.3, 3.3),
-            value="random",
-            inplace=False,
-        ),
-    ])
+    ]
 
+    to_tensor_and_norm = [
+        transforms.ToTensor(),
+        transforms.Normalize(mean=mean, std=std),
+    ]
+
+    train_transforms = []
+
+    # 1) Base augmentations only
+    train_transforms.append(
+        transforms.Compose(
+            base_aug + to_tensor_and_norm
+        )
+    )
+
+    # 2) Base augmentations + Gaussian blur
+    train_transforms.append(
+        transforms.Compose(
+            base_aug
+            + [
+                transforms.RandomApply(
+                    [transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 1.0))],
+                    p=1.0,  # always apply inside this pipeline
+                )
+            ]
+            + to_tensor_and_norm
+        )
+    )
+
+    # 3) Base augmentations + RandomErasing (needs to be after tensor + normalize)
+    train_transforms.append(
+        transforms.Compose(
+            base_aug
+            + to_tensor_and_norm
+            + [
+                transforms.RandomErasing(
+                    p=1.0,  # always apply for this pipeline
+                    scale=(0.02, 0.06),
+                    ratio=(0.3, 3.3),
+                    value="random",
+                    inplace=False,
+                )
+            ]
+        )
+    )
+
+    # Validation transform (no heavy aug, just resize + center crop)
     val_tf = transforms.Compose([
         transforms.Resize(int(image_size[0] * 1.1)),
         transforms.CenterCrop(image_size),
         transforms.ToTensor(),
-        transforms.Normalize(
-            mean=(0.485, 0.456, 0.406),
-            std=(0.229, 0.224, 0.225),
-        ),
+        transforms.Normalize(mean=mean, std=std),
     ])
 
-    return train_tf, val_tf
+    return train_transforms, val_tf
 
 
-
+# --------------------------
+#  DATASETS
+# --------------------------
 class SkinDataset(Dataset):
     def __init__(self, df, transform=None):
         self.df = df.reset_index(drop=True)
@@ -164,6 +205,40 @@ class SkinDataset(Dataset):
         return img, label
 
 
+class MultiAugmentDataset(Dataset):
+    """
+    Wraps a base dataset that returns (PIL_image, label) with no transform,
+    and applies a list of augmentations so that ALL augmentations are used.
+
+    If base has length N and you pass K transforms, this dataset has length N * K.
+    Index i maps to:
+        base_idx = i // K
+        aug_idx  = i % K
+    and returns transforms[aug_idx](base_image), label.
+    """
+
+    def __init__(self, base_dataset: Dataset, transforms_list):
+        super().__init__()
+        assert len(transforms_list) > 0, "Need at least one transform"
+        self.base_dataset = base_dataset
+        self.transforms_list = transforms_list
+        self.num_aug = len(transforms_list)
+
+    def __len__(self):
+        return len(self.base_dataset) * self.num_aug
+
+    def __getitem__(self, idx):
+        base_idx = idx // self.num_aug
+        aug_idx = idx % self.num_aug
+
+        img, label = self.base_dataset[base_idx]  # img is loaded lazily here
+        img = self.transforms_list[aug_idx](img)
+        return img, label
+
+
+# --------------------------
+#  LOADERS
+# --------------------------
 def get_loaders(
     csv_path: str = TASK_3_TRAIN_LABELS_DIR,
     images_dir: str = TASK_3_TRAIN_IMAGES_DIR,
@@ -183,17 +258,23 @@ def get_loaders(
     else:
         train_df, val_df = dfs
 
-    train_tf, val_tf = get_transforms(image_size)
+    train_tfs_list, val_tf = get_transforms(image_size)
 
-    train_dataset = SkinDataset(train_df, transform=train_tf)
-    val_dataset   = SkinDataset(val_df,  transform=val_tf)
+    # base training dataset: no transform → returns raw PIL image + label
+    train_base_dataset = SkinDataset(train_df, transform=None)
+
+    # wrapped training dataset: uses ALL augmentations
+    train_dataset = MultiAugmentDataset(train_base_dataset, train_tfs_list)
+
+    # validation / test use standard single transform
+    val_dataset = SkinDataset(val_df, transform=val_tf)
 
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
-        shuffle=True,
+        shuffle=True,             # shuffle over (image, augmentation) pairs
         num_workers=num_workers,
-        pin_memory=False,   # leave False for MPS
+        pin_memory=False,         # keep False for MPS
     )
     val_loader = DataLoader(
         val_dataset,

@@ -33,21 +33,22 @@ class BalancedFocalLoss(nn.Module):
         return (focal * ce).mean()
 
 
-# -----------------------------------------------------
-# MODEL
-# -----------------------------------------------------
 def create_model(
     num_classes: int,
-    model_name: str = "vit_base_patch16_384",
+    # swapped default backbone to ConvNeXtV2
+    model_name: str = "convnextv2_base",
+    # if available in your timm version, you can also try:
+    # model_name: str = "convnextv2_base.fcmae_ft_in22k_in1k",
     pretrained: bool = True,
 ) -> nn.Module:
-    model = timm.create_model(model_name, pretrained=pretrained, num_classes=num_classes)
+    model = timm.create_model(
+        model_name,
+        pretrained=pretrained,
+        num_classes=num_classes,
+    )
     return model
 
 
-# -----------------------------------------------------
-# TRAIN / EVAL
-# -----------------------------------------------------
 def train_one_epoch(
     model: nn.Module,
     loader,
@@ -115,14 +116,13 @@ def evaluate(
     return total_loss / total, total_correct / total
 
 
-# -----------------------------------------------------
-# HIGH-LEVEL TRAINER
-# -----------------------------------------------------
 def train_model(
     train_loader,
     val_loader,
     num_classes: int = 7,
-    model_name: str = "vit_base_patch16_384",
+    # default to ConvNeXtV2 here as well
+    model_name: str = "convnextv2_base",
+    # or "convnextv2_base.fcmae_ft_in22k_in1k"
     epochs: int = 10,
     lr: float = 3e-4,
     weight_decay: float = 0.05,
@@ -143,6 +143,7 @@ def train_model(
             device = torch.device("cuda")
         else:
             device = torch.device("cpu")
+
     if model is None:
         model = create_model(num_classes, model_name, pretrained=True).to(device)
     else:
