@@ -7,9 +7,6 @@ import timm
 from tqdm.auto import tqdm
 
 
-# ============================================================
-# Loss
-# ============================================================
 
 class BalancedFocalLoss(nn.Module):
     """

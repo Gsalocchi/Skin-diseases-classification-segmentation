@@ -1,5 +1,5 @@
 data/
 best_model.pth
 best_model_0_5192.pth
-vis_model_v2.pth
+vis_model.pth
 best_resnet50_resizer.pth
