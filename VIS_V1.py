@@ -125,10 +125,7 @@ def train_model(
     save_path: str = "best_model.pth",
     model: nn.Module = None,
 ):
-    """
-    High-level helper: trains and saves best val model.
-    Returns model and a history dict.
-    """
+
     # pick best device for your Mac/NVIDIA/CPU
     if device is None:
         if torch.backends.mps.is_available():

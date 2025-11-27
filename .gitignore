@@ -2,4 +2,6 @@ data/
 best_model.pth
 best_model_0_5192.pth
 vis_model.pth
+vis_model_a.pth
 best_resnet50_resizer.pth
+best_model_vis.pth
